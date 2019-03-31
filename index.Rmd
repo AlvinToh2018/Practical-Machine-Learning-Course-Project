@@ -1,0 +1,129 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "AT"
+date: "31 March 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Summary
+
+2 models (Boosting and Random Forest) were trained to predict the classe output of the Test Data.
+In the initial attempt, when the training was done with all the 160 predictors, it took many many hours to run.
+
+Data exploration was done to reduce the number of predictors used to train the models.
+2 categories of predictors were removed:
+
+1. Columns whose nature was not considered to be useful for prediction (such as user names and timestamps)
+2. The majority of the data in that column (> 95%) have no (useful) info inside (e.g blanks)
+
+The number of predictors was reduced from 160 to 53, and the each model training completed within 30 mins.
+
+5 Fold Cross Validation was used to estimate the out of sample error, and also choose the better model to predict the classe for the course quiz
+
+
+### Library & Data Loading
+```{r}
+library(caret)
+library(randomForest)
+library(e1071)
+library(gbm)
+
+set.seed(1)
+
+# TrainData <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"),header=TRUE)
+TrainData <- read.csv('./pml-training.csv', header=T)
+dim(TrainData)
+
+# TestData <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"),header=TRUE)
+TestData <- read.csv('./pml-testing.csv', header=T)
+dim(TestData)
+```
+
+### Data Exploration
+
+1. Columns whose nature was not considered to be useful for prediction (such as user names and timestamps)
+2. The majority of the data in that column (> 95%) have no (useful) info inside (e.g blanks)
+
+
+```{r}
+# >summary(TrainData) 
+# shows the first 7 cols are not needed / used to predict the classe value 
+# remove the 1st 7 cols - data not 
+TrainData <- TrainData [, -c(1:7)]
+TestData  <- TestData  [, -c(1:7)]
+
+
+# >summary(TrainData) 
+# shows many cols where majority ofthe values are # "" or #DIV/0! or 0.00. 
+# These will be removed
+
+# >colSums(is.na(TrainData))
+# The summary function does not show the number of NA values in that col
+# The colSums function shows that there are cols where the majority of the values are 'NA' 
+# These will also be removed
+
+
+# Cols with 95% of it's values == "" or #DIV/0! or 0.00 or NA are removed
+Cols_To_Keep <- (colSums (TrainData == "" | 
+                              TrainData == "#DIV/0!" | 
+                              TrainData == "0.00"  | 
+                              is.na(TrainData)) < 0.05*dim(TrainData)[1])
+
+
+# remove the cols from Train and Test Data
+TrainData <- TrainData [, Cols_To_Keep]
+TestData  <- TestData  [, Cols_To_Keep]
+
+
+# Only 53 cols are left for the training. check same # of cols in Train and Test Data
+dim(TrainData)
+dim(TestData)
+```
+
+### Model Training
+
+Train 2 models, Gradiuent Boosting Machine and Random Forest and select the better performing model for prediction. 5 fold cross validation was done to do the evaluation.
+
+``` {r} 
+# Set K-fold cross validation parameters. Do 5 - fold cross validation
+# This is controlled by the trainControl() function
+CV <- trainControl(method="cv", number=5)
+```
+
+``` {r echo=T, results='hide'}
+######################
+# Train Boosting model
+#
+mod.gbm <- train(classe ~ ., data=TrainData, method="gbm", trControl=CV)
+```
+
+```{r}
+mod.gbm
+```
+
+#### Using cross validation, the chosen gbm model has estimated out of sample error of 0.0364391     (i.e. 1-0.9635609)
+
+```{r echo=T, results='hide'}
+##################
+# Train Random Forest
+#
+mod.RF <- train(classe ~ ., data=TrainData, method="rf", trControl=CV)
+```
+
+```{r}
+mod.RF
+```
+#### Using cross validation, the chosen RF model has estimated out of sample error of 0.0053511     (i.e. 1-0.9946489)
+
+### Model selection
+
+Based on the cross validation results, the Random Forest model has a smaller estimated out of sample error and this is used  to predict the classe output for the quiz
+
+```{r}
+predict_results <- predict(mod.RF, newdata=TestData)
+predict_results
+```
